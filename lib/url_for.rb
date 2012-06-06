@@ -22,6 +22,11 @@ module ActionDispatch
               options.merge! :host => SslRequirement.ssl_host
             end
 
+            # if we've been told to use different port for ssl
+            if SslRequirement.ssl_port != 443 or SslRequirement.non_ssl_port != 80
+              options.merge! :port => SslRequirement.ssl_port
+            end
+
             # make it non-ssl and use specified options
           else
             options.merge!({
