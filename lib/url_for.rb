@@ -7,53 +7,42 @@ module ActionDispatch
 
       # Add a secure option to the rewrite method.
       def url_for_with_secure_option(options = {})
+        current_host = @request.try(:host) || options[:host]
+        current_port = @request.try(:port) || options[:port]
+        current_protocol = (@request.try(:protocol) || options[:protocol] || "http://").split("://").first
+
         secure = options.delete(:secure)
 
         # if secure && ssl check is not disabled, convert to full url with https
         if !secure.nil? && !SslRequirement.disable_ssl_check?
-          if secure == true || secure == 1 || secure.to_s.downcase == "true"
-            options.merge!({
-              :only_path => false,
-              :protocol => 'https'
-            })
-
-            # if we've been told to use different host for ssl, use it
-            unless SslRequirement.ssl_host.nil?
-              options.merge! :host => SslRequirement.ssl_host
-            end
-
-            # if we've been told to use different port for ssl
-            if SslRequirement.ssl_port != 443 or SslRequirement.non_ssl_port != 80
-              options.merge! :port => SslRequirement.ssl_port
-            end
-
-            # make it non-ssl and use specified options
+          if [true, 1, "true"].include? secure
+            protocol = "https"
+            host = SslRequirement.ssl_host || current_host
+            port = Integer(SslRequirement.ssl_port || 443)
+            port_std = port == 443
           else
-            options.merge!({
-              :protocol => 'http'
-            })
+            protocol = "http"
+            host = SslRequirement.non_ssl_host || current_host
+            port = Integer(SslRequirement.non_ssl_port || 80)
+            port_std = port == 80
+          end
+
+          options[:protocol] = protocol
+
+          if host != current_host
+            options[:host] = host
+            options[:only_path] = false
+          end
+
+          if !port_std or current_port != port
+            options[:port] = port_std ? nil : port
+            options[:only_path] = false
           end
         end
 
         url_for_without_secure_option(options)
       end
 
-      # if full URL is requested for http and we've been told to use a
-      # non-ssl host override, then use it
-      def url_for_with_non_ssl_host(options)
-        if !options[:only_path] && !SslRequirement.non_ssl_host.nil?
-          if !(/^https/ =~ (options[:protocol] || @request.try(:protocol)))
-            options.merge! :host => SslRequirement.non_ssl_host
-          end
-        end
-        url_for_without_non_ssl_host(options)
-      end
-
-      # want with_secure_option to get run first (so chain it last)
-      # Can't use method overriding using modules as RoutSet#url_for is defined directly in
-      # the class and not in a (Base) module. See http://stackoverflow.com/questions/3689736/rails-3-alias-method-chain-still-used
-      # for a good discussion.
-      alias_method_chain :url_for, :non_ssl_host
       alias_method_chain :url_for, :secure_option
     end
   end
